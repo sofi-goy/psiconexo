@@ -100,3 +100,35 @@ func (q *Queries) ListPatients(ctx context.Context, psychologistID int64) ([]Pat
 	}
 	return items, nil
 }
+
+const listPsychologists = `-- name: ListPsychologists :many
+SELECT id, name, email, phone FROM psychologists
+`
+
+func (q *Queries) ListPsychologists(ctx context.Context) ([]Psychologist, error) {
+	rows, err := q.db.QueryContext(ctx, listPsychologists)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Psychologist
+	for rows.Next() {
+		var i Psychologist
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.Phone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
