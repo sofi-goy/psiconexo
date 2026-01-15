@@ -5,67 +5,63 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/luciluz/psiconexo/internal/db"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
+
 	ctx := context.Background()
 
-	// 1. Conectar a la DB
+	// Conectar a SQLite
 	conn, err := sql.Open("sqlite3", "./psiconexo.db")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close()
 
+	// Crear tablas (si no existen)
 	schemaContent, err := os.ReadFile("internal/db/schema.sql")
 	if err != nil {
-		log.Fatal("Error leyendo el schema.sql: ", err)
+		log.Fatal("Error leyendo schema.sql: ", err)
+	}
+	if _, err := conn.Exec(string(schemaContent)); err != nil {
+		log.Fatal("Error ejecutando schema: ", err)
 	}
 
-	// Ejecutamos ese SQL en la base de datos
-	_, err = conn.Exec(string(schemaContent))
-	if err != nil {
-		log.Fatal("Error creando tablas: ", err)
-	}
-
+	// Inicializar las queries de SQLC
 	queries := db.New(conn)
 
-	// 3. Crear un Psicólogo (Simulacro)
-	// Usamos timestamp en el mail para que no de error de "Unique" si lo corres 2 veces
-	psy, err := queries.CreatePsychologist(ctx, db.CreatePsychologistParams{
-		Name:  "Lic. Ana Freud",
-		Email: fmt.Sprintf("ana_%d@example.com", 1), // Truco barato para pruebas
-		Phone: sql.NullString{String: "555-0001", Valid: true},
+	_ = queries // método backer
+	_ = ctx
+
+	// Crear el enrutador
+	r := chi.NewRouter()
+
+	// Middlewares básicos
+	r.Use(middleware.Logger)    // Muestra en consola cada vez que alguien entra
+	r.Use(middleware.Recoverer) // Si algo explota, que el servidor no se caiga
+
+	// Definir una ruta básica: GET /
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hola, Psiconexo te ama x_x"))
 	})
-	if err != nil {
-		log.Fatal("Error creando psicólogo: ", err)
-	}
-	fmt.Printf("Psicólogo creado: %s (ID: %d)\n", psy.Name, psy.ID)
 
-	// 4. Crear un Paciente para Ana
-	pat, err := queries.CreatePatient(ctx, db.CreatePatientParams{
-		Name:           "Paciente Ejemplo",
-		Email:          fmt.Sprintf("paciente_%d@test.com", 1),
-		Phone:          sql.NullString{String: "555-1234", Valid: true},
-		PsychologistID: psy.ID, // Aquí vinculamos!
+	// Definir ruta para probar la DB: GET /ping
+	r.Get("/test", func(w http.ResponseWriter, r *http.Request) {
+		if err := conn.Ping(); err != nil {
+			http.Error(w, "Base de datos muerta x_x", 500)
+			return
+		}
+		w.Write([]byte("Yeey! se conectó la base de datos correctamente."))
 	})
-	if err != nil {
-		log.Fatal("Error creando paciente: ", err)
-	}
-	fmt.Printf("Paciente creado: %s asignado a Psicólogo ID %d\n", pat.Name, pat.PsychologistID)
 
-	// 5. Listar pacientes de Ana
-	patients, err := queries.ListPatients(ctx, psy.ID)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("--- Lista de Pacientes ---")
-	for _, p := range patients {
-		fmt.Printf("- %s (%s)\n", p.Name, p.Email)
-	}
+	// Arrancar el servidor en el puerto 3000
+	fmt.Println("Servidor escuchando en http://localhost:3000")
+	http.ListenAndServe(":3000", r)
 }

@@ -1,12 +1,12 @@
 
-CREATE TABLE psychologists (
+CREATE TABLE IF NOT EXISTS psychologists (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     phone TEXT UNIQUE
 );
 
-CREATE TABLE patients (
+CREATE TABLE IF NOT EXISTS patients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     psychologist_id INTEGER NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE patients (
     FOREIGN KEY (psychologist_id) REFERENCES psychologists(id)
 );
 
-CREATE TABLE appointments (
+CREATE TABLE IF NOT EXISTS appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     psychologist_id INTEGER NOT NULL,
     patient_id INTEGER NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE appointments (
     FOREIGN KEY (patient_id) REFERENCES patients(id)
 );
 
-CREATE TABLE schedule_configs (
+CREATE TABLE IF NOT EXISTS schedule_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     psychologist_id INTEGER NOT NULL,
     day_of_week INTEGER NOT NULL,
