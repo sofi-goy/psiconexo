@@ -11,6 +11,7 @@ import (
 
 type Appointment struct {
 	ID              int64     `json:"id"`
+	PsychologistID  int64     `json:"psychologist_id"`
 	PatientID       int64     `json:"patient_id"`
 	StartTime       time.Time `json:"start_time"`
 	DurationMinutes int64     `json:"duration_minutes"`

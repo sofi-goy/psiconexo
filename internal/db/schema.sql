@@ -18,9 +18,11 @@ CREATE TABLE patients (
 
 CREATE TABLE appointments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    psychologist_id INTEGER NOT NULL,
     patient_id INTEGER NOT NULL,
     start_time DATETIME NOT NULL,
     duration_minutes INTEGER NOT NULL,
+    FOREIGN KEY (psychologist_id) REFERENCES psychologists(id),
     FOREIGN KEY (patient_id) REFERENCES patients(id)
 );
 
