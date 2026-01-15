@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/luciluz/psiconexo/internal/db"
 	_ "github.com/mattn/go-sqlite3"
@@ -20,26 +21,13 @@ func main() {
 	}
 	defer conn.Close()
 
-	// 2. Crear tablas (Migración manual por ahora)
-	// OJO: Aquí pegué SU esquema nuevo corregido
-	schema := `
-	CREATE TABLE IF NOT EXISTS psychologists (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		email TEXT NOT NULL UNIQUE,
-		phone TEXT UNIQUE
-	);
-	CREATE TABLE IF NOT EXISTS patients (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		psychologist_id INTEGER NOT NULL,
-		email TEXT NOT NULL UNIQUE,
-		phone TEXT UNIQUE,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (psychologist_id) REFERENCES psychologists(id)
-	);
-	`
-	_, err = conn.Exec(schema)
+	schemaContent, err := os.ReadFile("internal/db/schema.sql")
+	if err != nil {
+		log.Fatal("Error leyendo el schema.sql: ", err)
+	}
+
+	// Ejecutamos ese SQL en la base de datos
+	_, err = conn.Exec(string(schemaContent))
 	if err != nil {
 		log.Fatal("Error creando tablas: ", err)
 	}
