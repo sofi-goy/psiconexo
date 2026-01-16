@@ -8,27 +8,73 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
+const createAppointment = `-- name: CreateAppointment :one
+
+INSERT INTO appointments (
+    psychologist_id, patient_id, date, start_time, duration_minutes, status, rescheduled_from_id
+)
+VALUES (?, ?, ?, ?, ?, 'scheduled', ?)
+RETURNING id, psychologist_id, patient_id, date, start_time, duration_minutes, status, rescheduled_from_id, created_at, updated_at
+`
+
+type CreateAppointmentParams struct {
+	PsychologistID    int64         `json:"psychologist_id"`
+	PatientID         int64         `json:"patient_id"`
+	Date              time.Time     `json:"date"`
+	StartTime         string        `json:"start_time"`
+	DurationMinutes   int64         `json:"duration_minutes"`
+	RescheduledFromID sql.NullInt64 `json:"rescheduled_from_id"`
+}
+
+// SECTION: Appointments (Calendar)
+func (q *Queries) CreateAppointment(ctx context.Context, arg CreateAppointmentParams) (Appointment, error) {
+	row := q.db.QueryRowContext(ctx, createAppointment,
+		arg.PsychologistID,
+		arg.PatientID,
+		arg.Date,
+		arg.StartTime,
+		arg.DurationMinutes,
+		arg.RescheduledFromID,
+	)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.PsychologistID,
+		&i.PatientID,
+		&i.Date,
+		&i.StartTime,
+		&i.DurationMinutes,
+		&i.Status,
+		&i.RescheduledFromID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createPatient = `-- name: CreatePatient :one
-INSERT INTO patients (name, email, phone, psychologist_id)
+INSERT INTO patients (name, psychologist_id, email, phone)
 VALUES (?, ?, ?, ?)
-RETURNING id, name, psychologist_id, email, phone, created_at
+RETURNING id, name, psychologist_id, email, phone, active, created_at
 `
 
 type CreatePatientParams struct {
 	Name           string         `json:"name"`
+	PsychologistID int64          `json:"psychologist_id"`
 	Email          string         `json:"email"`
 	Phone          sql.NullString `json:"phone"`
-	PsychologistID int64          `json:"psychologist_id"`
 }
 
+// SECTION: Patients
 func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (Patient, error) {
 	row := q.db.QueryRowContext(ctx, createPatient,
 		arg.Name,
+		arg.PsychologistID,
 		arg.Email,
 		arg.Phone,
-		arg.PsychologistID,
 	)
 	var i Patient
 	err := row.Scan(
@@ -37,38 +83,356 @@ func (q *Queries) CreatePatient(ctx context.Context, arg CreatePatientParams) (P
 		&i.PsychologistID,
 		&i.Email,
 		&i.Phone,
+		&i.Active,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const createPsychologist = `-- name: CreatePsychologist :one
-INSERT INTO psychologists (name, email, phone)
-VALUES (?, ?, ?)
-RETURNING id, name, email, phone
+INSERT INTO psychologists (name, email, phone, cancellation_window_hours)
+VALUES (?, ?, ?, ?)
+RETURNING id, name, email, phone, cancellation_window_hours, created_at
 `
 
 type CreatePsychologistParams struct {
-	Name  string         `json:"name"`
-	Email string         `json:"email"`
-	Phone sql.NullString `json:"phone"`
+	Name                    string         `json:"name"`
+	Email                   string         `json:"email"`
+	Phone                   sql.NullString `json:"phone"`
+	CancellationWindowHours sql.NullInt64  `json:"cancellation_window_hours"`
 }
 
+// SECTION: Psychologists
 func (q *Queries) CreatePsychologist(ctx context.Context, arg CreatePsychologistParams) (Psychologist, error) {
-	row := q.db.QueryRowContext(ctx, createPsychologist, arg.Name, arg.Email, arg.Phone)
+	row := q.db.QueryRowContext(ctx, createPsychologist,
+		arg.Name,
+		arg.Email,
+		arg.Phone,
+		arg.CancellationWindowHours,
+	)
 	var i Psychologist
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Email,
 		&i.Phone,
+		&i.CancellationWindowHours,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const createRecurringSlot = `-- name: CreateRecurringSlot :one
+INSERT INTO recurring_slots (psychologist_id, patient_id, day_of_week, start_time, duration_minutes)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, psychologist_id, patient_id, day_of_week, start_time, duration_minutes, created_at
+`
+
+type CreateRecurringSlotParams struct {
+	PsychologistID  int64  `json:"psychologist_id"`
+	PatientID       int64  `json:"patient_id"`
+	DayOfWeek       int64  `json:"day_of_week"`
+	StartTime       string `json:"start_time"`
+	DurationMinutes int64  `json:"duration_minutes"`
+}
+
+// SECTION: Recurring Slots (Weekly Contracts)
+func (q *Queries) CreateRecurringSlot(ctx context.Context, arg CreateRecurringSlotParams) (RecurringSlot, error) {
+	row := q.db.QueryRowContext(ctx, createRecurringSlot,
+		arg.PsychologistID,
+		arg.PatientID,
+		arg.DayOfWeek,
+		arg.StartTime,
+		arg.DurationMinutes,
+	)
+	var i RecurringSlot
+	err := row.Scan(
+		&i.ID,
+		&i.PsychologistID,
+		&i.PatientID,
+		&i.DayOfWeek,
+		&i.StartTime,
+		&i.DurationMinutes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createScheduleConfig = `-- name: CreateScheduleConfig :one
+INSERT INTO schedule_configs (psychologist_id, day_of_week, start_time, end_time)
+VALUES (?, ?, ?, ?)
+RETURNING id, psychologist_id, day_of_week, start_time, end_time, created_at
+`
+
+type CreateScheduleConfigParams struct {
+	PsychologistID int64  `json:"psychologist_id"`
+	DayOfWeek      int64  `json:"day_of_week"`
+	StartTime      string `json:"start_time"`
+	EndTime        string `json:"end_time"`
+}
+
+// SECTION: Schedule Configuration
+func (q *Queries) CreateScheduleConfig(ctx context.Context, arg CreateScheduleConfigParams) (ScheduleConfig, error) {
+	row := q.db.QueryRowContext(ctx, createScheduleConfig,
+		arg.PsychologistID,
+		arg.DayOfWeek,
+		arg.StartTime,
+		arg.EndTime,
+	)
+	var i ScheduleConfig
+	err := row.Scan(
+		&i.ID,
+		&i.PsychologistID,
+		&i.DayOfWeek,
+		&i.StartTime,
+		&i.EndTime,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteScheduleConfigs = `-- name: DeleteScheduleConfigs :exec
+DELETE FROM schedule_configs WHERE psychologist_id = ?
+`
+
+func (q *Queries) DeleteScheduleConfigs(ctx context.Context, psychologistID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteScheduleConfigs, psychologistID)
+	return err
+}
+
+const getActiveRecurringSlotsForGeneration = `-- name: GetActiveRecurringSlotsForGeneration :many
+SELECT r.id, r.psychologist_id, r.patient_id, r.day_of_week, r.start_time, r.duration_minutes, r.created_at FROM recurring_slots r
+JOIN patients p ON r.patient_id = p.id
+WHERE r.psychologist_id = ? 
+  AND p.active = TRUE
+`
+
+func (q *Queries) GetActiveRecurringSlotsForGeneration(ctx context.Context, psychologistID int64) ([]RecurringSlot, error) {
+	rows, err := q.db.QueryContext(ctx, getActiveRecurringSlotsForGeneration, psychologistID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecurringSlot
+	for rows.Next() {
+		var i RecurringSlot
+		if err := rows.Scan(
+			&i.ID,
+			&i.PsychologistID,
+			&i.PatientID,
+			&i.DayOfWeek,
+			&i.StartTime,
+			&i.DurationMinutes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAppointment = `-- name: GetAppointment :one
+SELECT id, psychologist_id, patient_id, date, start_time, duration_minutes, status, rescheduled_from_id, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetAppointment(ctx context.Context, id int64) (Appointment, error) {
+	row := q.db.QueryRowContext(ctx, getAppointment, id)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.PsychologistID,
+		&i.PatientID,
+		&i.Date,
+		&i.StartTime,
+		&i.DurationMinutes,
+		&i.Status,
+		&i.RescheduledFromID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDayAppointments = `-- name: GetDayAppointments :many
+SELECT id, start_time, duration_minutes, status
+FROM appointments
+WHERE psychologist_id = ? 
+  AND date = ? 
+  AND status != 'cancelled'
+`
+
+type GetDayAppointmentsParams struct {
+	PsychologistID int64     `json:"psychologist_id"`
+	Date           time.Time `json:"date"`
+}
+
+type GetDayAppointmentsRow struct {
+	ID              int64          `json:"id"`
+	StartTime       string         `json:"start_time"`
+	DurationMinutes int64          `json:"duration_minutes"`
+	Status          sql.NullString `json:"status"`
+}
+
+func (q *Queries) GetDayAppointments(ctx context.Context, arg GetDayAppointmentsParams) ([]GetDayAppointmentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getDayAppointments, arg.PsychologistID, arg.Date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDayAppointmentsRow
+	for rows.Next() {
+		var i GetDayAppointmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StartTime,
+			&i.DurationMinutes,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPatient = `-- name: GetPatient :one
+SELECT id, name, psychologist_id, email, phone, active, created_at FROM patients WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetPatient(ctx context.Context, id int64) (Patient, error) {
+	row := q.db.QueryRowContext(ctx, getPatient, id)
+	var i Patient
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.PsychologistID,
+		&i.Email,
+		&i.Phone,
+		&i.Active,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPsychologistByEmail = `-- name: GetPsychologistByEmail :one
+SELECT id, name, email, phone, cancellation_window_hours, created_at FROM psychologists 
+WHERE email = ? LIMIT 1
+`
+
+func (q *Queries) GetPsychologistByEmail(ctx context.Context, email string) (Psychologist, error) {
+	row := q.db.QueryRowContext(ctx, getPsychologistByEmail, email)
+	var i Psychologist
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Phone,
+		&i.CancellationWindowHours,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPsychologistSettings = `-- name: GetPsychologistSettings :one
+SELECT id, cancellation_window_hours 
+FROM psychologists 
+WHERE id = ?
+`
+
+type GetPsychologistSettingsRow struct {
+	ID                      int64         `json:"id"`
+	CancellationWindowHours sql.NullInt64 `json:"cancellation_window_hours"`
+}
+
+func (q *Queries) GetPsychologistSettings(ctx context.Context, id int64) (GetPsychologistSettingsRow, error) {
+	row := q.db.QueryRowContext(ctx, getPsychologistSettings, id)
+	var i GetPsychologistSettingsRow
+	err := row.Scan(&i.ID, &i.CancellationWindowHours)
+	return i, err
+}
+
+const listAppointmentsInDateRange = `-- name: ListAppointmentsInDateRange :many
+SELECT a.id, a.psychologist_id, a.patient_id, a.date, a.start_time, a.duration_minutes, a.status, a.rescheduled_from_id, a.created_at, a.updated_at, p.name as patient_name
+FROM appointments a
+JOIN patients p ON a.patient_id = p.id
+WHERE a.psychologist_id = ? 
+  AND a.date >= ? 
+  AND a.date <= ?
+ORDER BY a.date, a.start_time
+`
+
+type ListAppointmentsInDateRangeParams struct {
+	PsychologistID int64     `json:"psychologist_id"`
+	Date           time.Time `json:"date"`
+	Date_2         time.Time `json:"date_2"`
+}
+
+type ListAppointmentsInDateRangeRow struct {
+	ID                int64          `json:"id"`
+	PsychologistID    int64          `json:"psychologist_id"`
+	PatientID         int64          `json:"patient_id"`
+	Date              time.Time      `json:"date"`
+	StartTime         string         `json:"start_time"`
+	DurationMinutes   int64          `json:"duration_minutes"`
+	Status            sql.NullString `json:"status"`
+	RescheduledFromID sql.NullInt64  `json:"rescheduled_from_id"`
+	CreatedAt         sql.NullTime   `json:"created_at"`
+	UpdatedAt         sql.NullTime   `json:"updated_at"`
+	PatientName       string         `json:"patient_name"`
+}
+
+func (q *Queries) ListAppointmentsInDateRange(ctx context.Context, arg ListAppointmentsInDateRangeParams) ([]ListAppointmentsInDateRangeRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAppointmentsInDateRange, arg.PsychologistID, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAppointmentsInDateRangeRow
+	for rows.Next() {
+		var i ListAppointmentsInDateRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PsychologistID,
+			&i.PatientID,
+			&i.Date,
+			&i.StartTime,
+			&i.DurationMinutes,
+			&i.Status,
+			&i.RescheduledFromID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PatientName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPatients = `-- name: ListPatients :many
-SELECT id, name, psychologist_id, email, phone, created_at FROM patients
-WHERE psychologist_id = ?
+SELECT id, name, psychologist_id, email, phone, active, created_at FROM patients
+WHERE psychologist_id = ? AND active = TRUE
+ORDER BY name
 `
 
 func (q *Queries) ListPatients(ctx context.Context, psychologistID int64) ([]Patient, error) {
@@ -86,6 +450,7 @@ func (q *Queries) ListPatients(ctx context.Context, psychologistID int64) ([]Pat
 			&i.PsychologistID,
 			&i.Email,
 			&i.Phone,
+			&i.Active,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -101,24 +466,43 @@ func (q *Queries) ListPatients(ctx context.Context, psychologistID int64) ([]Pat
 	return items, nil
 }
 
-const listPsychologists = `-- name: ListPsychologists :many
-SELECT id, name, email, phone FROM psychologists
+const listRecurringSlots = `-- name: ListRecurringSlots :many
+SELECT r.id, r.psychologist_id, r.patient_id, r.day_of_week, r.start_time, r.duration_minutes, r.created_at, p.name as patient_name
+FROM recurring_slots r
+JOIN patients p ON r.patient_id = p.id
+WHERE r.psychologist_id = ?
+ORDER BY r.day_of_week, r.start_time
 `
 
-func (q *Queries) ListPsychologists(ctx context.Context) ([]Psychologist, error) {
-	rows, err := q.db.QueryContext(ctx, listPsychologists)
+type ListRecurringSlotsRow struct {
+	ID              int64        `json:"id"`
+	PsychologistID  int64        `json:"psychologist_id"`
+	PatientID       int64        `json:"patient_id"`
+	DayOfWeek       int64        `json:"day_of_week"`
+	StartTime       string       `json:"start_time"`
+	DurationMinutes int64        `json:"duration_minutes"`
+	CreatedAt       sql.NullTime `json:"created_at"`
+	PatientName     string       `json:"patient_name"`
+}
+
+func (q *Queries) ListRecurringSlots(ctx context.Context, psychologistID int64) ([]ListRecurringSlotsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRecurringSlots, psychologistID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Psychologist
+	var items []ListRecurringSlotsRow
 	for rows.Next() {
-		var i Psychologist
+		var i ListRecurringSlotsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Name,
-			&i.Email,
-			&i.Phone,
+			&i.PsychologistID,
+			&i.PatientID,
+			&i.DayOfWeek,
+			&i.StartTime,
+			&i.DurationMinutes,
+			&i.CreatedAt,
+			&i.PatientName,
 		); err != nil {
 			return nil, err
 		}
@@ -131,4 +515,70 @@ func (q *Queries) ListPsychologists(ctx context.Context) ([]Psychologist, error)
 		return nil, err
 	}
 	return items, nil
+}
+
+const listScheduleConfigs = `-- name: ListScheduleConfigs :many
+SELECT id, psychologist_id, day_of_week, start_time, end_time, created_at FROM schedule_configs
+WHERE psychologist_id = ?
+ORDER BY day_of_week, start_time
+`
+
+func (q *Queries) ListScheduleConfigs(ctx context.Context, psychologistID int64) ([]ScheduleConfig, error) {
+	rows, err := q.db.QueryContext(ctx, listScheduleConfigs, psychologistID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ScheduleConfig
+	for rows.Next() {
+		var i ScheduleConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.PsychologistID,
+			&i.DayOfWeek,
+			&i.StartTime,
+			&i.EndTime,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateAppointmentStatus = `-- name: UpdateAppointmentStatus :one
+UPDATE appointments
+SET status = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, psychologist_id, patient_id, date, start_time, duration_minutes, status, rescheduled_from_id, created_at, updated_at
+`
+
+type UpdateAppointmentStatusParams struct {
+	Status sql.NullString `json:"status"`
+	ID     int64          `json:"id"`
+}
+
+func (q *Queries) UpdateAppointmentStatus(ctx context.Context, arg UpdateAppointmentStatusParams) (Appointment, error) {
+	row := q.db.QueryRowContext(ctx, updateAppointmentStatus, arg.Status, arg.ID)
+	var i Appointment
+	err := row.Scan(
+		&i.ID,
+		&i.PsychologistID,
+		&i.PatientID,
+		&i.Date,
+		&i.StartTime,
+		&i.DurationMinutes,
+		&i.Status,
+		&i.RescheduledFromID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

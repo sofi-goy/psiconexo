@@ -10,11 +10,16 @@ import (
 )
 
 type Appointment struct {
-	ID              int64     `json:"id"`
-	PsychologistID  int64     `json:"psychologist_id"`
-	PatientID       int64     `json:"patient_id"`
-	StartTime       time.Time `json:"start_time"`
-	DurationMinutes int64     `json:"duration_minutes"`
+	ID                int64          `json:"id"`
+	PsychologistID    int64          `json:"psychologist_id"`
+	PatientID         int64          `json:"patient_id"`
+	Date              time.Time      `json:"date"`
+	StartTime         string         `json:"start_time"`
+	DurationMinutes   int64          `json:"duration_minutes"`
+	Status            sql.NullString `json:"status"`
+	RescheduledFromID sql.NullInt64  `json:"rescheduled_from_id"`
+	CreatedAt         sql.NullTime   `json:"created_at"`
+	UpdatedAt         sql.NullTime   `json:"updated_at"`
 }
 
 type Patient struct {
@@ -23,20 +28,34 @@ type Patient struct {
 	PsychologistID int64          `json:"psychologist_id"`
 	Email          string         `json:"email"`
 	Phone          sql.NullString `json:"phone"`
+	Active         sql.NullBool   `json:"active"`
 	CreatedAt      sql.NullTime   `json:"created_at"`
 }
 
 type Psychologist struct {
-	ID    int64          `json:"id"`
-	Name  string         `json:"name"`
-	Email string         `json:"email"`
-	Phone sql.NullString `json:"phone"`
+	ID                      int64          `json:"id"`
+	Name                    string         `json:"name"`
+	Email                   string         `json:"email"`
+	Phone                   sql.NullString `json:"phone"`
+	CancellationWindowHours sql.NullInt64  `json:"cancellation_window_hours"`
+	CreatedAt               sql.NullTime   `json:"created_at"`
+}
+
+type RecurringSlot struct {
+	ID              int64        `json:"id"`
+	PsychologistID  int64        `json:"psychologist_id"`
+	PatientID       int64        `json:"patient_id"`
+	DayOfWeek       int64        `json:"day_of_week"`
+	StartTime       string       `json:"start_time"`
+	DurationMinutes int64        `json:"duration_minutes"`
+	CreatedAt       sql.NullTime `json:"created_at"`
 }
 
 type ScheduleConfig struct {
-	ID             int64 `json:"id"`
-	PsychologistID int64 `json:"psychologist_id"`
-	DayOfWeek      int64 `json:"day_of_week"`
-	StartHour      int64 `json:"start_hour"`
-	EndHour        int64 `json:"end_hour"`
+	ID             int64        `json:"id"`
+	PsychologistID int64        `json:"psychologist_id"`
+	DayOfWeek      int64        `json:"day_of_week"`
+	StartTime      string       `json:"start_time"`
+	EndTime        string       `json:"end_time"`
+	CreatedAt      sql.NullTime `json:"created_at"`
 }
